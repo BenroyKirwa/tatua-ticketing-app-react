@@ -14,8 +14,6 @@ const DynamicTable = ({
   itemsPerPage = 5,
   columnTypes = {},
   relationsByType = {},
-  customSort = null,
-  customFilter = null,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortCriteria, setSortCriteria] = useState([]);
@@ -108,10 +106,10 @@ const DynamicTable = ({
   const applySortAndFilter = (dataToProcess) => {
     let processedData = [...dataToProcess];
     if (enableFilter && filterCriteria.length > 0) {
-      processedData = customFilter ? customFilter(processedData, filterCriteria) : defaultFilter(processedData, filterCriteria);
+      processedData = defaultFilter(processedData, filterCriteria);
     }
     if (enableSort && sortCriteria.length > 0) {
-      processedData = customSort ? customSort(processedData, sortCriteria) : defaultSort(processedData, sortCriteria);
+      processedData = defaultSort(processedData, sortCriteria);
     }
     return processedData;
   };
