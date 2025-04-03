@@ -78,12 +78,12 @@ const TicketsList = ({ tickets, setTickets, onRefresh }) => {
         const storedTickets = JSON.parse(localStorage.getItem('tickets')) || [];
         setTickets(storedTickets);
         console.log('Tickets refreshed from localStorage:', storedTickets);
-      };
+    };
 
     const ticketColumns = [
-        { key: 'id', label: 'ID' },
+        { key: 'id', label: 'ID', type: 'number', isSort: true},
         {
-            key: 'raisedBy', label: 'Raised By',
+            key: 'raisedBy', label: 'Raised By', isSort: false,
             formatter: (value, item) => (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span>{item.fullName || 'N/A'}</span>
@@ -94,7 +94,7 @@ const TicketsList = ({ tickets, setTickets, onRefresh }) => {
             ),
         },
         {
-            key: 'ticketDetails', label: 'Ticket Detials',
+            key: 'ticketDetails', label: 'Ticket Detials', isSort: false,
             formatter: (value, item) => (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span>{item.subject || 'N/A'}</span>
@@ -107,10 +107,12 @@ const TicketsList = ({ tickets, setTickets, onRefresh }) => {
         {
             key: 'created_at',
             label: 'Created Date',
+            type: 'date',
+            isSort: true,
             formatter: (value) => new Date(value).toLocaleDateString(),
         },
         {
-            key: 'actions', label: 'Actions',
+            key: 'actions', label: 'Actions', isSort: false,
             formatter: (_, item) => (
                 <div className="actions">
                     <button className="action-btn view-btn" onClick={() => showInfo(item.id)} title="View Ticket" data-id="${ticket.id}"><img alt="image" src={infoIcon} width="20" height="20" /></button>
@@ -122,36 +124,13 @@ const TicketsList = ({ tickets, setTickets, onRefresh }) => {
                 </div>
             ),
         },
+        {
+            key: 'fullName', label: 'Full Name', type: 'string', isSort: true,
+            formatter: (data, item) => (
+                <span>{item.fullName || 'N/A'}</span>
+            ),
+        },
     ];
-
-    const columnTypes = {
-        id: 'number',
-        title: 'string',
-        description: 'string',
-        status: 'string',
-        priority: 'string',
-        assigned_to: 'string',
-        created_at: 'date',
-        updated_at: 'date',
-    };
-
-    const relationsByType = {
-        string: [
-            { value: 'eq', label: 'Equals' },
-            { value: 'contains', label: 'Contains' },
-            { value: 'startswith', label: 'Starts With' },
-        ],
-        number: [
-            { value: 'eq', label: 'Equals' },
-            { value: 'gt', label: 'Greater Than' },
-            { value: 'lt', label: 'Less Than' },
-        ],
-        date: [
-            { value: 'eq', label: 'Equals' },
-            { value: 'gt', label: 'After' },
-            { value: 'lt', label: 'Before' },
-        ],
-    };
 
     const selectedTicket = tickets.find((ticket) => Number(ticket.id) === Number(selectedTicketId));
 
@@ -162,8 +141,6 @@ const TicketsList = ({ tickets, setTickets, onRefresh }) => {
                 data={tickets}
                 columns={ticketColumns}
                 onRefresh={handleRefresh}
-                columnTypes={columnTypes}
-                relationsByType={relationsByType}
             />
             {isInfoPopupOpen && (
                 <TicketInfoPopup

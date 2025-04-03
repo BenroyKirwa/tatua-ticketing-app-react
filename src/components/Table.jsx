@@ -12,8 +12,6 @@ const DynamicTable = ({
   enableSort = true,
   enableFilter = true,
   itemsPerPage = 5,
-  columnTypes = {},
-  relationsByType = {},
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortCriteria, setSortCriteria] = useState([]);
@@ -22,6 +20,8 @@ const DynamicTable = ({
   const [tempFilterCriteria, setTempFilterCriteria] = useState([]);
   const [showSortPopup, setShowSortPopup] = useState(false);
   const [showFilterPopup, setShowFilterPopup] = useState(false);
+
+
 
   // Fallback: Generate columns from data if not provided
   const getDynamicColumns = () => {
@@ -42,20 +42,39 @@ const DynamicTable = ({
       .replace('At', 'Date');
 
   // Default sorting logic
-  const defaultSort = (dataToSort, sortCriteriaToUse) => {
+  const defaultSort = (dataToSort, sortCriteriaToUse, columns) => {
+    if (!Array.isArray(columns)) {
+      console.error('Columns prop is undefined or not an array.');
+      return dataToSort;
+    }
+
     return [...dataToSort].sort((a, b) => {
       for (const criterion of sortCriteriaToUse) {
         const { column, order } = criterion;
-        let valueA = a[column] || '';
-        let valueB = b[column] || '';
-        const type = columnTypes[column] || 'string';
 
+        const columnDef = columns.find((col) => col.key === column);
+        if (!columnDef) {
+          console.warn(`Column definition for "${column}" not found.`);
+          return 0;
+        }
+
+        const type = columnDef.type || 'string';
+
+        // Use raw data for sorting, not formatted value
+        let valueA = a[column];
+        let valueB = b[column];
+
+        // Ensure fallback for missing values
+        valueA = valueA ?? '';
+        valueB = valueB ?? '';
+
+        // Convert types properly
         if (type === 'number') {
           valueA = parseFloat(valueA) || 0;
           valueB = parseFloat(valueB) || 0;
         } else if (type === 'date') {
-          valueA = new Date(valueA);
-          valueB = new Date(valueB);
+          valueA = valueA ? new Date(valueA) : new Date(0);
+          valueB = valueB ? new Date(valueB) : new Date(0);
         } else {
           valueA = valueA.toString().toLowerCase();
           valueB = valueB.toString().toLowerCase();
@@ -67,6 +86,7 @@ const DynamicTable = ({
       return 0;
     });
   };
+
 
   // Default filtering logic
   const defaultFilter = (dataToFilter, filterCriteriaToUse) => {
@@ -105,14 +125,21 @@ const DynamicTable = ({
   // Apply sort and filter
   const applySortAndFilter = (dataToProcess) => {
     let processedData = [...dataToProcess];
+
     if (enableFilter && filterCriteria.length > 0) {
       processedData = defaultFilter(processedData, filterCriteria);
     }
+
     if (enableSort && sortCriteria.length > 0) {
-      processedData = defaultSort(processedData, sortCriteria);
+      const validSortCriteria = sortCriteria.filter((c) =>
+        columns.some((col) => col.key === c.column && col.isSort !== false)
+      );
+      processedData = defaultSort(processedData, validSortCriteria, columns);
     }
+
     return processedData;
   };
+
 
   // Pagination logic
   const processedData = applySortAndFilter(data);
@@ -339,11 +366,13 @@ const DynamicTable = ({
                           value={criterion.column}
                           onChange={(e) => updateSortCriterion(criterion.id, 'column', e.target.value)}
                         >
-                          {tableColumns.map((column) => (
-                            <option key={column.key} value={column.key}>
-                              {column.label}
-                            </option>
-                          ))}
+                          {tableColumns
+                            .filter((column) => column.isSort !== false)
+                            .map((column) => (
+                              <option key={column.key} value={column.key}>
+                                {column.label}
+                              </option>
+                            ))}
                         </select>
                       </div>
                       <div>
