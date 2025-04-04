@@ -130,6 +130,24 @@ const TicketsList = ({ tickets, setTickets, onRefresh}) => {
                 <span>{item.fullName || 'N/A'}</span>
             ),
         },
+        {
+            key: 'email', label: 'Email', type: 'string', isSort: true, hide:true,
+            formatter: (data, item) => (
+                <span>{item.email || 'N/A'}</span>
+            ),
+        },
+        {
+            key: 'phone', label: 'Phone', type: 'string', isSort: true, hide:true,
+            formatter: (data, item) => (
+                <span>{item.phone || 'N/A'}</span>
+            ),
+        },
+        {
+            key: 'subject', label: 'Subject', type: 'string', isSort: true, hide:true,
+            formatter: (data, item) => (
+                <span>{item.subject || 'N/A'}</span>
+            ),
+        },
     ];
 
     const selectedTicket = tickets.find((ticket) => Number(ticket.id) === Number(selectedTicketId));
