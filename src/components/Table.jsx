@@ -34,6 +34,11 @@ const DynamicTable = ({
     }));
   };
 
+  // Get all columns (for sorting/filtering)
+  const allColumns = getDynamicColumns();
+  // Filter for display (exclude hidden columns)
+  const displayColumns = allColumns.filter((column) => !column.hide);
+
   const formatLabel = (key) =>
     key
       .replace(/([A-Z])/g, ' $1')
@@ -51,14 +56,13 @@ const DynamicTable = ({
     return [...dataToSort].sort((a, b) => {
       for (const criterion of sortCriteriaToUse) {
         const { column, order } = criterion;
-
         const columnDef = columns.find((col) => col.key === column);
+        const type = columnDef.type || 'string';
+
         if (!columnDef) {
           console.warn(`Column definition for "${column}" not found.`);
           return 0;
         }
-
-        const type = columnDef.type || 'string';
 
         // Use raw data for sorting, not formatted value
         let valueA = a[column];
@@ -265,24 +269,23 @@ const DynamicTable = ({
         </button>
       </div>
       <table>
-        <thead>
+        <><thead>
           <tr>
-            {tableColumns.map((column) => (
+            {displayColumns.map((column) => (
               <th key={column.key}>{column.label}</th>
             ))}
           </tr>
-        </thead>
-        <tbody>
-          {currentItems.map((item) => (
-            <tr key={item.id}>
-              {tableColumns.map((column) => {
-                const value = item[column.key];
-                const content = column.formatter ? column.formatter(value, item) : value;
-                return <td key={`${item.id}-${column.key}`}>{content}</td>;
-              })}
-            </tr>
-          ))}
-        </tbody>
+        </thead><tbody>
+            {currentItems.map((item) => (
+              <tr key={item.id}>
+                {displayColumns.map((column) => {
+                  const value = item[column.key];
+                  const content = column.formatter ? column.formatter(value, item) : value;
+                  return <td key={`${item.id}-${column.key}`}>{content}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody></>
       </table>
       {enablePagination && totalPages > 1 && (
         <div className="pagination">
@@ -366,8 +369,8 @@ const DynamicTable = ({
                           value={criterion.column}
                           onChange={(e) => updateSortCriterion(criterion.id, 'column', e.target.value)}
                         >
-                          {tableColumns
-                            .filter((column) => column.isSort !== false)
+                          {allColumns
+                            .filter((column) => column.isSort === true)
                             .map((column) => (
                               <option key={column.key} value={column.key}>
                                 {column.label}

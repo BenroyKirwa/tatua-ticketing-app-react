@@ -9,7 +9,7 @@ import emailIcon from '/email.svg';
 import editIcon from '/edit.svg';
 import deleteIcon from '/trash.svg';
 
-const TicketsList = ({ tickets, setTickets, onRefresh }) => {
+const TicketsList = ({ tickets, setTickets, onRefresh}) => {
     const [selectedTicketId, setSelectedTicketId] = useState(null);
     const [isInfoPopupOpen, setIsInfoPopupOpen] = useState(false);
     const [isEditPopupOpen, setIsEditPopupOpen] = useState(false);
@@ -125,7 +125,7 @@ const TicketsList = ({ tickets, setTickets, onRefresh }) => {
             ),
         },
         {
-            key: 'fullName', label: 'Full Name', type: 'string', isSort: true,
+            key: 'fullName', label: 'Full Name', type: 'string', isSort: true, hide:true,
             formatter: (data, item) => (
                 <span>{item.fullName || 'N/A'}</span>
             ),
