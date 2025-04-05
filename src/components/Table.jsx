@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import sortIcon from '/sort.svg';
 import filterIcon from '/filter.svg';
 import cancelIcon from '/cancel.svg';
 
-
 const DynamicTable = ({
   data = [],
   columns = [],
-  onRefresh = () => { },
+  onRefresh = () => {},
   enablePagination = true,
   enableSort = true,
   enableFilter = true,
   itemsPerPage = 5,
+  isApiDriven = false,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortCriteria, setSortCriteria] = useState([]);
@@ -20,9 +20,34 @@ const DynamicTable = ({
   const [tempFilterCriteria, setTempFilterCriteria] = useState([]);
   const [showSortPopup, setShowSortPopup] = useState(false);
   const [showFilterPopup, setShowFilterPopup] = useState(false);
+  const [processedData, setProcessedData] = useState(data);
 
+  const defaultRelationsByType = {
+    string: [
+      { value: 'eq', label: 'Equals' },
+      { value: 'contains', label: 'Contains' },
+      { value: 'startswith', label: 'Starts With' },
+    ],
+    number: [
+      { value: 'eq', label: 'Equals' },
+      { value: 'gt', label: 'Greater Than' },
+      { value: 'lt', label: 'Less Than' },
+    ],
+    date: [
+      { value: 'eq', label: 'Equals' },
+      { value: 'gt', label: 'After' },
+      { value: 'lt', label: 'Before' },
+    ],
+  };
 
-
+  // Process data when data, sort, or filter changes
+  useEffect(() => {
+    const processData = async () => {
+      const result = await applySortAndFilter(data);
+      setProcessedData(result);
+    };
+    processData();
+  }, [data, sortCriteria, filterCriteria, isApiDriven]);
   // Fallback: Generate columns from data if not provided
   const getDynamicColumns = () => {
     if (columns.length > 0) return columns;
@@ -34,9 +59,7 @@ const DynamicTable = ({
     }));
   };
 
-  // Get all columns (for sorting/filtering)
   const allColumns = getDynamicColumns();
-  // Filter for display (exclude hidden columns)
   const displayColumns = allColumns.filter((column) => !column.hide);
 
   const formatLabel = (key) =>
@@ -46,7 +69,6 @@ const DynamicTable = ({
       .replace(/^./, (str) => str.toUpperCase())
       .replace('At', 'Date');
 
-  // Default sorting logic
   const defaultSort = (dataToSort, sortCriteriaToUse, columns) => {
     if (!Array.isArray(columns)) {
       console.error('Columns prop is undefined or not an array.');
@@ -64,15 +86,12 @@ const DynamicTable = ({
           return 0;
         }
 
-        // Use raw data for sorting, not formatted value
         let valueA = a[column];
         let valueB = b[column];
 
-        // Ensure fallback for missing values
         valueA = valueA ?? '';
         valueB = valueB ?? '';
 
-        // Convert types properly
         if (type === 'number') {
           valueA = parseFloat(valueA) || 0;
           valueB = parseFloat(valueB) || 0;
@@ -91,33 +110,38 @@ const DynamicTable = ({
     });
   };
 
+  const defaultFilter = (dataToFilter, filterCriteriaToUse, columns) => {
+    if (!Array.isArray(columns)) {
+      console.error('Columns prop is undefined or not an array.');
+      return dataToFilter;
+    }
 
-  // Default filtering logic
-  const defaultFilter = (dataToFilter, filterCriteriaToUse) => {
     return dataToFilter.filter((item) =>
       filterCriteriaToUse.every((criterion) => {
         const { column, relation, value } = criterion;
         if (!value) return true;
-        const itemValue = item[column];
-        if (!itemValue) return false;
+        const itemValue = item[column] ?? '';
+        if (!itemValue && relation !== 'eq') return false;
 
-        const type = columnTypes[column] || 'string';
+        const columnDef = columns.find((col) => col.key === column) || {};
+        const type = columnDef.type || 'string';
+
         if (type === 'string') {
-          const lowerItemValue = itemValue.toLowerCase();
+          const lowerItemValue = itemValue.toString().toLowerCase();
           const lowerValue = value.toLowerCase();
           if (relation === 'eq') return lowerItemValue === lowerValue;
           if (relation === 'contains') return lowerItemValue.includes(lowerValue);
           if (relation === 'startswith') return lowerItemValue.startsWith(lowerValue);
         } else if (type === 'number') {
           const numValue = parseFloat(value);
-          const itemNum = parseFloat(itemValue);
+          const itemNum = parseFloat(itemValue) || 0;
           if (relation === 'eq') return itemNum === numValue;
           if (relation === 'gt') return itemNum > numValue;
           if (relation === 'lt') return itemNum < numValue;
         } else if (type === 'date') {
           const dateValue = new Date(value);
-          const itemDate = new Date(itemValue);
-          if (relation === 'eq') return dateValue.toDateString() === itemDate.toDateString();
+          const itemDate = new Date(itemValue) || new Date(0);
+          if (relation === 'eq') return itemDate.toDateString() === dateValue.toDateString();
           if (relation === 'gt') return itemDate > dateValue;
           if (relation === 'lt') return itemDate < dateValue;
         }
@@ -126,33 +150,49 @@ const DynamicTable = ({
     );
   };
 
-  // Apply sort and filter
-  const applySortAndFilter = (dataToProcess) => {
-    let processedData = [...dataToProcess];
+  const applySortAndFilter = async (dataToProcess) => {
+    if (isApiDriven) {
+      const sortQuery = sortCriteria
+        .map((c) => `${c.column}:${c.order}`)
+        .join(',');
+      const filterQuery = filterCriteria
+        .map((c) => `${c.column}:${c.relation}:${encodeURIComponent(c.value)}`)
+        .join(',');
 
-    if (enableFilter && filterCriteria.length > 0) {
-      processedData = defaultFilter(processedData, filterCriteria);
+      const query = [];
+      if (sortQuery) query.push(`sort=${sortQuery}`);
+      if (filterQuery) query.push(`filter=${filterQuery}`);
+
+      try {
+        const updatedData = await fetchData(query.length ? `?${query.join('&')}` : '');
+        return updatedData;
+      } catch (error) {
+        console.error('API fetch error:', error);
+        return dataToProcess;
+      }
+    } else {
+      let processedData = [...dataToProcess];
+
+      if (enableFilter && filterCriteria.length > 0) {
+        processedData = defaultFilter(processedData, filterCriteria, columns);
+      }
+
+      if (enableSort && sortCriteria.length > 0) {
+        const validSortCriteria = sortCriteria.filter((c) =>
+          columns.some((col) => col.key === c.column && col.isSort !== false)
+        );
+        processedData = defaultSort(processedData, validSortCriteria, columns);
+      }
+
+      return processedData;
     }
-
-    if (enableSort && sortCriteria.length > 0) {
-      const validSortCriteria = sortCriteria.filter((c) =>
-        columns.some((col) => col.key === c.column && col.isSort !== false)
-      );
-      processedData = defaultSort(processedData, validSortCriteria, columns);
-    }
-
-    return processedData;
   };
 
-
-  // Pagination logic
-  const processedData = applySortAndFilter(data);
   const totalPages = Math.ceil(processedData.length / itemsPerPage);
   const indexOfLastItem = enablePagination ? currentPage * itemsPerPage : processedData.length;
   const indexOfFirstItem = enablePagination ? indexOfLastItem - itemsPerPage : 0;
   const currentItems = processedData.slice(indexOfFirstItem, indexOfLastItem);
 
-  // Sort Popup Logic
   const addSortCriteria = () => {
     const defaultColumn = columns[0]?.key || '';
     setTempSortCriteria([...tempSortCriteria, { id: Date.now(), column: defaultColumn, order: 'asc' }]);
@@ -179,14 +219,14 @@ const DynamicTable = ({
     setSortCriteria([]);
   };
 
-  // Filter Popup Logic
   const addFilterCriteria = () => {
     const defaultColumn = columns[0]?.key || '';
-    const defaultType = columnTypes[defaultColumn] || 'string';
-    const defaultRelations = relationsByType[defaultType] || [];
+    const columnDef = columns.find((col) => col.key === defaultColumn) || {};
+    const type = columnDef.type || 'string';
+    const relations = defaultRelationsByType[type] || defaultRelationsByType.string;
     setTempFilterCriteria([
       ...tempFilterCriteria,
-      { id: Date.now(), column: defaultColumn, relation: defaultRelations[0]?.value || 'eq', value: '' },
+      { id: Date.now(), column: defaultColumn, relation: relations[0].value, value: '' },
     ]);
   };
 
@@ -196,11 +236,12 @@ const DynamicTable = ({
 
   const updateFilterCriterion = (id, field, value) => {
     if (field === 'column') {
-      const newType = columnTypes[value] || 'string';
-      const newRelations = relationsByType[newType] || [];
+      const columnDef = columns.find((col) => col.key === value) || {};
+      const newType = columnDef.type || 'string';
+      const newRelations = defaultRelationsByType[newType] || defaultRelationsByType.string;
       setTempFilterCriteria(
         tempFilterCriteria.map((c) =>
-          c.id === id ? { ...c, column: value, relation: newRelations[0]?.value || 'eq', value: '' } : c
+          c.id === id ? { ...c, column: value, relation: newRelations[0].value, value: '' } : c
         )
       );
     } else {
@@ -221,8 +262,6 @@ const DynamicTable = ({
     setFilterCriteria([]);
   };
 
-  const tableColumns = getDynamicColumns();
-
   if (!data || data.length === 0) {
     return <div>No data available</div>;
   }
@@ -241,7 +280,14 @@ const DynamicTable = ({
             <img src={sortIcon} alt="sort icon" height="15" width="15" />
             <b>{sortCriteria.length > 0 ? `${sortCriteria.length} Sort` : 'Sort'}</b>
             {sortCriteria.length > 0 && (
-              <span className="close-sort" onClick={(e) => { e.stopPropagation(); setSortCriteria([]); setCurrentPage(1); }}>
+              <span
+                className="close-sort"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSortCriteria([]);
+                  setCurrentPage(1);
+                }}
+              >
                 ×
               </span>
             )}
@@ -258,7 +304,14 @@ const DynamicTable = ({
             <img src={filterIcon} alt="filter icon" height="15" width="15" />
             <b>{filterCriteria.length > 0 ? `${filterCriteria.length} Filter` : 'Filter'}</b>
             {filterCriteria.length > 0 && (
-              <span className="close-filter" onClick={(e) => { e.stopPropagation(); setFilterCriteria([]); setCurrentPage(1); }}>
+              <span
+                className="close-filter"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilterCriteria([]);
+                  setCurrentPage(1);
+                }}
+              >
                 ×
               </span>
             )}
@@ -269,27 +322,27 @@ const DynamicTable = ({
         </button>
       </div>
       <table>
-        <><thead>
+        <thead>
           <tr>
             {displayColumns.map((column) => (
               <th key={column.key}>{column.label}</th>
             ))}
           </tr>
-        </thead><tbody>
-            {currentItems.map((item) => (
-              <tr key={item.id}>
-                {displayColumns.map((column) => {
-                  const value = item[column.key];
-                  const content = column.formatter ? column.formatter(value, item) : value;
-                  return <td key={`${item.id}-${column.key}`}>{content}</td>;
-                })}
-              </tr>
-            ))}
-          </tbody></>
+        </thead>
+        <tbody>
+          {currentItems.map((item) => (
+            <tr key={item.id}>
+              {displayColumns.map((column) => {
+                const value = item[column.key];
+                const content = column.formatter ? column.formatter(value, item) : value;
+                return <td key={`${item.id}-${column.key}`}>{content}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
       </table>
       {enablePagination && totalPages > 1 && (
         <div className="pagination">
-          {/* First Page Button */}
           <button
             onClick={() => setCurrentPage(1)}
             disabled={currentPage === 1}
@@ -297,8 +350,6 @@ const DynamicTable = ({
           >
             First
           </button>
-
-          {/* Previous Page Button */}
           <button
             onClick={() => setCurrentPage(currentPage - 1)}
             disabled={currentPage === 1}
@@ -306,8 +357,6 @@ const DynamicTable = ({
           >
             Previous
           </button>
-
-          {/* Page Numbers */}
           {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
             <button
               key={page}
@@ -317,8 +366,6 @@ const DynamicTable = ({
               {page}
             </button>
           ))}
-
-          {/* Next Page Button */}
           <button
             onClick={() => setCurrentPage(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -326,8 +373,6 @@ const DynamicTable = ({
           >
             Next
           </button>
-
-          {/* Last Page Button */}
           <button
             onClick={() => setCurrentPage(totalPages)}
             disabled={currentPage === totalPages}
@@ -427,8 +472,9 @@ const DynamicTable = ({
                   <button onClick={addFilterCriteria}>Add Filter</button>
                 ) : (
                   tempFilterCriteria.map((criterion) => {
-                    const columnType = columnTypes[criterion.column] || 'string';
-                    const relations = relationsByType[columnType] || [];
+                    const columnDef = allColumns.find((col) => col.key === criterion.column) || {};
+                    const columnType = columnDef.type || 'string';
+                    const relations = defaultRelationsByType[columnType] || defaultRelationsByType.string;
                     return (
                       <div key={criterion.id} className="filter-criterion">
                         <div>
@@ -437,7 +483,7 @@ const DynamicTable = ({
                             value={criterion.column}
                             onChange={(e) => updateFilterCriterion(criterion.id, 'column', e.target.value)}
                           >
-                            {tableColumns.map((column) => (
+                            {allColumns.map((column) => (
                               <option key={column.key} value={column.key}>
                                 {column.label}
                               </option>

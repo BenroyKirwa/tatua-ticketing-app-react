@@ -94,7 +94,7 @@ const TicketsList = ({ tickets, setTickets, onRefresh}) => {
             ),
         },
         {
-            key: 'ticketDetails', label: 'Ticket Detials', isSort: false,
+            key: 'ticketDetails', label: 'Ticket Details', isSort: false,
             formatter: (value, item) => (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span>{item.subject || 'N/A'}</span>
