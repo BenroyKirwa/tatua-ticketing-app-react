@@ -6,7 +6,7 @@ import cancelIcon from '/cancel.svg';
 const DynamicTable = ({
   data = [],
   columns = [],
-  onRefresh = () => {},
+  onRefresh = () => { },
   enablePagination = true,
   enableSort = true,
   enableFilter = true,
@@ -21,6 +21,7 @@ const DynamicTable = ({
   const [showSortPopup, setShowSortPopup] = useState(false);
   const [showFilterPopup, setShowFilterPopup] = useState(false);
   const [processedData, setProcessedData] = useState(data);
+  const [isLoading, setIsLoading] = useState(false);
 
   const defaultRelationsByType = {
     string: [
@@ -43,8 +44,10 @@ const DynamicTable = ({
   // Process data when data, sort, or filter changes
   useEffect(() => {
     const processData = async () => {
+      setIsLoading(true);
       const result = await applySortAndFilter(data);
       setProcessedData(result);
+      setIsLoading(false);
     };
     processData();
   }, [data, sortCriteria, filterCriteria, isApiDriven]);
@@ -321,26 +324,30 @@ const DynamicTable = ({
           <b>↻ Refresh</b>
         </button>
       </div>
-      <table>
-        <thead>
-          <tr>
-            {displayColumns.map((column) => (
-              <th key={column.key}>{column.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {currentItems.map((item) => (
-            <tr key={item.id}>
-              {displayColumns.map((column) => {
-                const value = item[column.key];
-                const content = column.formatter ? column.formatter(value, item) : value;
-                return <td key={`${item.id}-${column.key}`}>{content}</td>;
-              })}
+      {isLoading ?
+        <div className='loader'>
+        </div> :
+        <table>
+          <thead>
+            <tr>
+              {displayColumns.map((column) => (
+                <th key={column.key}>{column.label}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {currentItems.map((item) => (
+              <tr key={item.id}>
+                {displayColumns.map((column) => {
+                  const value = item[column.key];
+                  const content = column.formatter ? column.formatter(value, item) : value;
+                  return <td key={`${item.id}-${column.key}`}>{content}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      }
       {enablePagination && totalPages > 1 && (
         <div className="pagination">
           <button
